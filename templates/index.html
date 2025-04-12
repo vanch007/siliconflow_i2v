@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频生成 - SiliconFlow</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand" href="/">视频生成</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/">首页</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/tasks">任务列表</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-body">
+                        <form id="videoForm" enctype="multipart/form-data">
+                            <div class="mb-4">
+                                <label for="model" class="form-label">
+                                    <i class="bi bi-arrow-right"></i>
+                                    视频生成模型 (I2V Model)
+                                    <i class="bi bi-info-circle" data-bs-toggle="tooltip" title="选择用于生成视频的模型"></i>
+                                </label>
+                                <select class="form-select" id="model" name="model">
+                                    <option value="Wan-AI/Wan2.1-I2V-14B-720P" selected>Wan2.1-I2V-14B-720P</option>
+                                    <option value="Wan-AI/Wan2.1-I2V-14B-720P-Turbo">Wan2.1-I2V-14B-720P-Turbo</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-4">
+                                <label for="apiKey" class="form-label">
+                                    <i class="bi bi-key"></i>
+                                    API Key
+                                    <i class="bi bi-info-circle" data-bs-toggle="tooltip" title="输入您的SiliconFlow API Key，将保存在本地"></i>
+                                </label>
+                                <div class="input-group">
+                                    <input type="password" class="form-control" id="apiKey" name="api_key" placeholder="输入您的API Key">
+                                    <button type="button" class="btn btn-outline-primary" id="testApiKeyBtn">
+                                        <i class="bi bi-check-circle"></i> 测试
+                                    </button>
+                                    <a href="{{ free_api_key_url }}" target="_blank" class="btn btn-outline-secondary">
+                                        获取免费API Key
+                                    </a>
+                                </div>
+                                <div class="form-text mt-1" id="apiKeyStatus"></div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label for="vlmModel" class="form-label">
+                                    <i class="bi bi-arrow-right"></i>
+                                    图像识别模型 (VLM Model)
+                                    <i class="bi bi-info-circle" data-bs-toggle="tooltip" title="选择用于识别图像内容的视觉语言模型"></i>
+                                </label>
+                                <select class="form-select" id="vlmModel" name="vlm_model">
+                                    <option value="Qwen/Qwen2.5-VL-72B-Instruct" selected>Qwen2.5-VL-72B-Instruct</option>
+                                    <option value="Qwen/Qwen2.5-VL-32B-Instruct">Qwen2.5-VL-32B-Instruct</option>
+                                    <option value="deepseek-ai/deepseek-vl2">deepseek-ai/deepseek-vl2</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-4">
+                                <label for="llmModel" class="form-label">
+                                    <i class="bi bi-arrow-right"></i>
+                                    文本润色模型 (LLM Model)
+                                    <i class="bi bi-info-circle" data-bs-toggle="tooltip" title="选择用于润色提示词的语言模型"></i>
+                                </label>
+                                <select class="form-select" id="llmModel" name="llm_model">
+                                    <option value="Qwen/QwQ-32B" selected>QwQ-32B</option>
+                                    <option value="deepseek-ai/DeepSeek-R1">deepseek-ai/DeepSeek-R1</option>
+                                    <option value="deepseek-ai/DeepSeek-V3">deepseek-ai/DeepSeek-V3</option>
+                                    <option value="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B">deepseek-ai/DeepSeek-R1-Distill-Qwen-32B</option>
+                                    <option value="deepseek-ai/DeepSeek-R1-Distill-Qwen-14B">deepseek-ai/DeepSeek-R1-Distill-Qwen-14B</option>
+                                    <option value="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B">deepseek-ai/DeepSeek-R1-Distill-Qwen-7B</option>
+                                    <option value="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B">deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B</option>
+                                    <option value="deepseek-ai/DeepSeek-V2.5">deepseek-ai/DeepSeek-V2.5</option>
+                                    <option value="Qwen/Qwen2.5-72B-Instruct-128K">Qwen/Qwen2.5-72B-Instruct-128K</option>
+                                    <option value="Qwen/Qwen2.5-72B-Instruct">Qwen/Qwen2.5-72B-Instruct</option>
+                                    <option value="Qwen/Qwen2.5-32B-Instruct">Qwen/Qwen2.5-32B-Instruct</option>
+                                    <option value="Qwen/Qwen2.5-14B-Instruct">Qwen/Qwen2.5-14B-Instruct</option>
+                                    <option value="Qwen/Qwen2.5-7B-Instruct">Qwen/Qwen2.5-7B-Instruct</option>
+                                    <option value="Qwen/Qwen2.5-Coder-32B-Instruct">Qwen/Qwen2.5-Coder-32B-Instruct</option>
+                                    <option value="Qwen/Qwen2.5-Coder-7B-Instruct">Qwen/Qwen2.5-Coder-7B-Instruct</option>
+                                    <option value="Qwen/Qwen2-7B-Instruct">Qwen/Qwen2-7B-Instruct</option>
+                                    <option value="Qwen/Qwen2-1.5B-Instruct">Qwen/Qwen2-1.5B-Instruct</option>
+                                    <option value="Qwen/QwQ-32B-Preview">Qwen/QwQ-32B-Preview</option>
+                                    <option value="TeleAI/TeleChat2">TeleAI/TeleChat2</option>
+                                    <option value="THUDM/glm-4-9b-chat">THUDM/glm-4-9b-chat</option>
+                                    <option value="Vendor-A/Qwen/Qwen2.5-72B-Instruct">Vendor-A/Qwen/Qwen2.5-72B-Instruct</option>
+                                    <option value="internlm/internlm2_5-7b-chat">internlm/internlm2_5-7b-chat</option>
+                                    <option value="internlm/internlm2_5-20b-chat">internlm/internlm2_5-20b-chat</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-4">
+                                <label for="images" class="form-label">
+                                    <i class="bi bi-arrow-right"></i>
+                                    上传图片
+                                    <i class="bi bi-info-circle" data-bs-toggle="tooltip" title="支持jpg、png、jpeg格式，可选择多张图片同时上传"></i>
+                                </label>
+                                <div class="input-group">
+                                    <input type="file" class="form-control" id="images" name="image" accept="image/*" multiple required>
+                                    <span class="input-group-text"><i class="bi bi-images"></i></span>
+                                </div>
+                                <div id="imagePreviewContainer" class="mt-2 row g-2">
+                                    <!-- 图片预览将在这里显示 -->
+                                </div>
+                                <div class="form-text mt-1">已选择 <span id="selectedImagesCount">0</span> 张图片</div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label for="taskCount" class="form-label">
+                                    <i class="bi bi-arrow-right"></i>
+                                    每张图生成次数
+                                    <i class="bi bi-info-circle" data-bs-toggle="tooltip" title="每张图片生成视频的次数，可以生成多个不同的视频"></i>
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="taskCount" name="task_count" value="1" min="1" max="5">
+                                    <span class="input-group-text">次</span>
+                                </div>
+                                <div class="form-text">总共将生成 <span id="totalTaskCount">0</span> 个任务</div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label for="seed" class="form-label">
+                                    <i class="bi bi-arrow-right"></i>
+                                    Seed
+                                    <i class="bi bi-info-circle" data-bs-toggle="tooltip" title="设置随机种子以获得可重复的结果"></i>
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="seed" name="seed" placeholder="例如：1517763021">
+                                    <button class="btn btn-outline-secondary" type="button" id="randomSeedBtn">
+                                        <i class="bi bi-shuffle"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label for="negativePrompt" class="form-label">
+                                    <i class="bi bi-arrow-right"></i>
+                                    负面提示词
+                                    <i class="bi bi-info-circle" data-bs-toggle="tooltip" title="指定不希望在生成视频中出现的元素"></i>
+                                </label>
+                                <textarea class="form-control" id="negativePrompt" name="negative_prompt" rows="3">色调暗淡,过曝,静态,细节模糊,不清,字幕,闪烁,杂点,画面,画面静止</textarea>
+                            </div>
+
+                            <div class="mb-4">
+                                <label for="imageSize" class="form-label">
+                                    <i class="bi bi-arrow-right"></i>
+                                    视频尺寸
+                                    <i class="bi bi-info-circle" data-bs-toggle="tooltip" title="选择生成视频的尺寸比例"></i>
+                                </label>
+                                <select class="form-select" id="imageSize" name="image_size">
+                                    <option value="1280x720">1280x720 (横屏)</option>
+                                    <option value="720x1280" selected>720x1280 (竖屏)</option>
+                                    <option value="960x960">960x960 (方形)</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-4">
+                                <label for="userPrompt" class="form-label">
+                                    <i class="bi bi-arrow-right"></i>
+                                    风格提示词
+                                    <i class="bi bi-info-circle" data-bs-toggle="tooltip" title="用于指导视频生成的风格和内容"></i>
+                                </label>
+                                <textarea class="form-control" id="userPrompt" name="user_prompt" rows="3">{{ default_user_prompt }}</textarea>
+                            </div>
+
+                            <div class="mb-4 form-check">
+                                <input type="checkbox" class="form-check-input" id="extend" name="extend" value="true">
+                                <label class="form-check-label" for="extend">使用最后一帧延长视频</label>
+                            </div>
+
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary" id="submitBtn">
+                                    <i class="bi bi-play-fill"></i> 生成视频 <span id="submitBtnCount" class="badge bg-light text-primary ms-1">1</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="mb-0">生成历史</h5>
+                            <a href="/tasks" class="text-decoration-none">查看全部</a>
+                        </div>
+                        <div id="recentTasks" class="task-history">
+                            <p class="text-center text-muted">加载中...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Task Created Modal -->
+    <div class="modal fade" id="taskCreatedModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">任务已创建</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center mb-3">
+                        <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
+                    </div>
+                    <p class="text-center">您的 <span id="createdTaskCount" class="fw-bold">1</span> 个视频生成任务已成功创建！</p>
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle-fill me-2"></i>
+                        您可以在<a href="/tasks" id="tasksLink" class="alert-link">任务列表</a>页面查看生成进度。
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">继续创建</button>
+                    <a href="/tasks" class="btn btn-primary">查看任务</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Batch Processing Modal -->
+    <div class="modal fade" id="batchProcessingModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">正在创建任务</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <div class="spinner-border text-primary mb-3" role="status">
+                        <span class="visually-hidden">加载中...</span>
+                    </div>
+                    <p>正在创建任务，请稍候...</p>
+                    <div class="progress mt-3">
+                        <div id="batchProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                    </div>
+                    <p class="mt-2">已完成: <span id="completedTasksCount">0</span>/<span id="totalTasksCount">0</span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-light text-muted text-center py-3 mt-5 border-top">
+        <div class="container">
+            <p class="mb-0">SiliconFlow 图生视频 &copy; 2025</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

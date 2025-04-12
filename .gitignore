@@ -1,0 +1,29 @@
+# 忽略输出和上传文件夹
+output/
+uploads/
+venv/
+
+# 忽略数据库文件
+*.sqlite
+*.db
+
+# 忽略Python缓存文件
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 忽略系统文件
+.DS_Store
+.env
+.venv
+env/
+ENV/
+
+# 忽略日志文件
+*.log
+
+# 忽略IDE配置文件
+.idea/
+.vscode/
+*.swp
+*.swo

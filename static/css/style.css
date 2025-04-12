@@ -1,0 +1,238 @@
+/* Main Styles */
+body {
+    background-color: #f8f9fa;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    color: #333;
+}
+
+footer {
+    margin-top: auto;
+}
+
+/* Card Styles */
+.card {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    margin-bottom: 20px;
+    border-radius: 8px;
+    border: none;
+}
+
+.card-header {
+    background-color: #fff;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    padding: 1rem 1.25rem;
+}
+
+/* Form Styles */
+.form-control, .form-select {
+    border: 1px solid #e0e0e0;
+    padding: 0.6rem 0.75rem;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #4a89dc;
+    box-shadow: 0 0 0 0.15rem rgba(74, 137, 220, 0.15);
+}
+
+.form-label {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: #555;
+}
+
+.btn-primary {
+    background-color: #4a89dc;
+    border-color: #4a89dc;
+}
+
+.btn-primary:hover, .btn-primary:focus {
+    background-color: #3a7bd5;
+    border-color: #3a7bd5;
+}
+
+/* Image Preview */
+#imagePreview {
+    max-height: 300px;
+    object-fit: contain;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    padding: 4px;
+    background-color: #fff;
+}
+
+.preview-thumbnail {
+    height: 120px;
+    object-fit: cover;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}
+
+/* Task Status Badges */
+.badge {
+    font-size: 0.75em;
+    padding: 0.4em 0.7em;
+    font-weight: 500;
+    border-radius: 4px;
+}
+
+/* Task List */
+.task-row {
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.task-row:hover {
+    background-color: rgba(74, 137, 220, 0.05);
+}
+
+/* 子任务样式 */
+.child-task {
+    background-color: rgba(0, 0, 0, 0.02);
+    border-left: 3px solid #4a89dc;
+}
+
+.child-task:hover {
+    background-color: rgba(74, 137, 220, 0.08);
+}
+
+.task-image-thumbnail {
+    width: 70px;
+    height: 70px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+    padding: 2px;
+    background-color: #fff;
+}
+
+/* Task History */
+.task-history .list-group-item {
+    border-left: none;
+    border-right: none;
+    padding: 0.75rem 0;
+    border-color: #f0f0f0;
+    transition: all 0.2s ease;
+}
+
+.task-history .list-group-item:first-child {
+    border-top: none;
+}
+
+.task-history .list-group-item:last-child {
+    border-bottom: none;
+}
+
+/* 历史任务图片封面样式 */
+.task-history .task-cover {
+    width: 60px;
+    height: 60px;
+    overflow: hidden;
+    border-radius: 4px;
+    position: relative;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transition: transform 0.2s ease;
+}
+
+.task-history .task-cover:hover {
+    transform: scale(1.05);
+}
+
+.task-history .task-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.task-history .task-status-badge {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background-color: rgba(0,0,0,0.5);
+    color: white;
+    font-size: 0.7rem;
+    padding: 2px 0;
+    text-align: center;
+}
+
+.task-history .task-date {
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+/* Video Player */
+.video-player-container {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Status Colors */
+.status-pending {
+    color: #6c757d;
+}
+
+.status-processing {
+    color: #4a89dc;
+}
+
+.status-completed {
+    color: #2ecc71;
+}
+
+.status-failed {
+    color: #e74c3c;
+}
+
+.status-warning {
+    color: #f39c12;
+}
+
+/* Animations */
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+.pulse {
+    animation: pulse 1.5s infinite ease-in-out;
+}
+
+/* Custom Elements */
+.bi-arrow-right {
+    color: #4a89dc;
+    margin-right: 5px;
+}
+
+.bi-info-circle {
+    color: #aaa;
+    font-size: 0.85em;
+    margin-left: 5px;
+    cursor: help;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .card-title {
+        font-size: 1.25rem;
+    }
+
+    .task-image-thumbnail {
+        width: 50px;
+        height: 50px;
+    }
+
+    .container {
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+}

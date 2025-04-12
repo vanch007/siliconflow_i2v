@@ -23,6 +23,7 @@ from image_processor import process_image_with_vlm
 from prompt_generator import refine_prompt
 from video_generator import generate_video, get_video_status, download_video
 from video_extender import extend_video
+from video_merger import merge_videos
 from database import init_db, get_db, close_db
 
 # Initialize Flask app
@@ -37,6 +38,43 @@ ensure_directory_exists(app.config['OUTPUT_FOLDER'])
 
 # Initialize database
 init_db(app)
+
+# 检查ffmpeg是否可用
+try:
+    import subprocess
+    import os
+
+    # 尝试多种方式检测ffmpeg
+    ffmpeg_paths = [
+        'ffmpeg',  # 默认路径
+        '/opt/homebrew/bin/ffmpeg',  # Homebrew安装路径
+        '/usr/local/bin/ffmpeg',  # 其他常见路径
+        '/usr/bin/ffmpeg'
+    ]
+
+    ffmpeg_found = False
+    for ffmpeg_path in ffmpeg_paths:
+        try:
+            result = subprocess.run([ffmpeg_path, '-version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            logger.info(f"ffmpeg找到了，路径: {ffmpeg_path}")
+            app.config['FFMPEG_PATH'] = ffmpeg_path
+            ffmpeg_found = True
+            break
+        except (subprocess.SubprocessError, FileNotFoundError):
+            logger.debug(f"ffmpeg不在路径: {ffmpeg_path}")
+            continue
+
+    if ffmpeg_found:
+        app.config['FFMPEG_AVAILABLE'] = True
+        logger.info("ffmpeg可用，视频合并功能已启用")
+    else:
+        # 如果所有路径都失败，则禁用视频合并功能
+        app.config['FFMPEG_AVAILABLE'] = False
+        logger.warning("ffmpeg不可用，视频合并功能将被禁用。请安装ffmpeg以启用此功能。")
+except Exception as e:
+    logger.error(f"检查ffmpeg时出错: {str(e)}")
+    app.config['FFMPEG_AVAILABLE'] = False
+    logger.warning("ffmpeg不可用，视频合并功能将被禁用。请安装ffmpeg以启用此功能。")
 
 # Global task dictionary to track running tasks
 # 缓存已处理的图片信息，避免重复处理
@@ -381,55 +419,86 @@ def preview(task_id):
 @app.route('/api/tasks', methods=['GET'])
 def get_tasks():
     """Get all tasks."""
-    db = get_db()
-    tasks = db.execute('SELECT * FROM tasks ORDER BY created_at DESC').fetchall()
+    try:
+        db = get_db()
+        tasks = db.execute('SELECT * FROM tasks ORDER BY created_at DESC').fetchall()
 
-    # Convert tasks to a list of dictionaries
-    task_list = []
-    for task in tasks:
-        task_dict = {
-            'id': task['id'],
-            'status': task['status'],
-            'message': task['message'],
-            'image_path': task['image_path'],
-            'prompt': task['prompt'],
-            'video_path': task['video_path'],
-            'parent_task_id': task['parent_task_id'] if 'parent_task_id' in task.keys() else None,
-            'created_at': task['created_at'],
-            'updated_at': task['updated_at']
-        }
-        task_list.append(task_dict)
+        # Convert tasks to a list of dictionaries
+        task_list = []
+        for task in tasks:
+            # 获取所有列名
+            columns = task.keys()
 
-    return jsonify(task_list)
+            # 创建基本任务字典
+            task_dict = {
+                'id': task['id'],
+                'status': task['status'],
+                'message': task['message'],
+                'created_at': task['created_at'],
+                'updated_at': task['updated_at']
+            }
+
+            # 添加可能存在的其他字段
+            optional_fields = [
+                'image_path', 'prompt', 'video_path', 'parent_task_id',
+                'request_id', 'model', 'vlm_model', 'llm_model', 'prompt_template'
+            ]
+
+            for field in optional_fields:
+                if field in columns:
+                    task_dict[field] = task[field]
+                else:
+                    task_dict[field] = None
+
+            task_list.append(task_dict)
+
+        return jsonify(task_list)
+    except Exception as e:
+        logger.error(f"获取任务列表时出错: {str(e)}")
+        return jsonify({'error': f"获取任务列表时出错: {str(e)}"}), 500
 
 @app.route('/api/tasks/<task_id>', methods=['GET'])
 def get_task(task_id):
     """Get a specific task."""
-    db = get_db()
-    task = db.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
-
-    if not task:
-        return jsonify({'error': 'Task not found'}), 404
-
-    task_dict = {
-        'id': task['id'],
-        'status': task['status'],
-        'message': task['message'],
-        'image_path': task['image_path'],
-        'prompt': task['prompt'],
-        'request_id': task['request_id'],
-        'video_path': task['video_path'],
-        'created_at': task['created_at'],
-        'updated_at': task['updated_at']
-    }
-
-    # 添加model字段（如果存在）
     try:
-        task_dict['model'] = task['model']
-    except (IndexError, KeyError):
-        task_dict['model'] = I2V_MODEL
+        db = get_db()
+        task = db.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
 
-    return jsonify(task_dict)
+        if not task:
+            return jsonify({'error': 'Task not found'}), 404
+
+        # 获取所有列名
+        columns = task.keys()
+
+        # 创建基本任务字典
+        task_dict = {
+            'id': task['id'],
+            'status': task['status'],
+            'message': task['message'],
+            'created_at': task['created_at'],
+            'updated_at': task['updated_at']
+        }
+
+        # 添加可能存在的其他字段
+        optional_fields = [
+            'image_path', 'prompt', 'video_path', 'parent_task_id',
+            'request_id', 'model', 'vlm_model', 'llm_model', 'prompt_template'
+        ]
+
+        for field in optional_fields:
+            if field in columns:
+                task_dict[field] = task[field]
+            else:
+                task_dict[field] = None
+
+        # 确保模型字段有默认值
+        if not task_dict['model']:
+            task_dict['model'] = I2V_MODEL
+
+        return jsonify(task_dict)
+    except Exception as e:
+        logger.error(f"获取任务详情时出错: {str(e)}")
+        return jsonify({'error': f"获取任务详情时出错: {str(e)}"}), 500
 
 @app.route('/api/tasks/<task_id>/check_video', methods=['GET'])
 def check_task_video(task_id):
@@ -1058,6 +1127,121 @@ def test_api_key():
     except Exception as e:
         logger.error(f"测试API Key时出错: {str(e)}")
         return jsonify({'success': False, 'message': f'测试API Key时出错: {str(e)}'}), 500
+
+@app.route('/api/merge_videos', methods=['POST'])
+def merge_videos_api():
+    """Merge multiple videos into a single video."""
+    try:
+        # 获取请求参数
+        data = request.json
+        task_ids = data.get('task_ids', [])
+
+        # 如果是虚拟的任务ID，返回ffmpeg状态
+        if 'test1' in task_ids and 'test2' in task_ids and len(task_ids) == 2:
+            if app.config.get('FFMPEG_AVAILABLE', False):
+                return jsonify({
+                    'success': True,
+                    'message': 'ffmpeg可用，视频合并功能已启用',
+                    'ffmpeg_path': app.config.get('FFMPEG_PATH', 'ffmpeg')
+                })
+            else:
+                return jsonify({
+                    'error': 'ffmpeg不可用，无法合并视频。请安装ffmpeg后再尝试。',
+                    'code': 'ffmpeg_not_available'
+                })
+
+        # 检查ffmpeg是否可用
+        if not app.config.get('FFMPEG_AVAILABLE', False):
+            return jsonify({
+                'error': 'ffmpeg不可用，无法合并视频。请安装ffmpeg后再尝试。',
+                'code': 'ffmpeg_not_available'
+            }), 400
+
+        if not task_ids or not isinstance(task_ids, list) or len(task_ids) < 2:
+            return jsonify({'error': '至少需要两个有效的任务ID'}), 400
+
+        # 获取API Key
+        api_key = data.get('api_key', None)
+
+        # 获取任务信息
+        db = get_db()
+        video_paths = []
+        task_prompts = []
+
+        for task_id in task_ids:
+            task = db.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
+
+            if not task:
+                return jsonify({'error': f'任务 {task_id} 不存在'}), 404
+
+            if not task['video_path']:
+                return jsonify({'error': f'任务 {task_id} 没有生成的视频'}), 400
+
+            # 添加完整的视频路径
+            video_path = os.path.join(app.config['OUTPUT_FOLDER'], task['video_path'])
+            if not os.path.exists(video_path):
+                return jsonify({'error': f'视频文件 {task["video_path"]} 不存在'}), 404
+
+            video_paths.append(video_path)
+
+            # 收集提示词用于新任务
+            if task['prompt']:
+                task_prompts.append(task['prompt'])
+
+        # 合并提示词
+        merged_prompt = None
+        if task_prompts:
+            merged_prompt = " | ".join(task_prompts)
+            if len(merged_prompt) > 500:  # 如果提示词太长，截断
+                merged_prompt = merged_prompt[:497] + "..."
+
+        # 创建新任务
+        new_task_id = str(uuid.uuid4())
+
+        # 创建新任务记录
+        db.execute(
+            'INSERT INTO tasks (id, status, message, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+            (new_task_id, 'merging_videos', '正在合并视频...', datetime.now().isoformat(), datetime.now().isoformat())
+        )
+        db.commit()
+
+        # 启动后台线程合并视频
+        def merge_videos_thread():
+            try:
+                with app.app_context():
+                    # 合并视频
+                    merged_path = merge_videos(video_paths)
+
+                    if not merged_path:
+                        update_task_status(new_task_id, 'failed', '合并视频失败')
+                        return
+
+                    # 更新任务状态和视频路径
+                    update_task_status(new_task_id, 'completed', '视频合并成功')
+                    update_task_video_path(new_task_id, os.path.basename(merged_path))
+
+                    # 如果有合并的提示词，更新任务提示词
+                    if merged_prompt:
+                        update_task_prompt(new_task_id, merged_prompt)
+            except Exception as e:
+                logger.error(f"合并视频线程出错: {str(e)}")
+                with app.app_context():
+                    update_task_status(new_task_id, 'failed', f'合并视频出错: {str(e)}')
+
+        # 启动线程
+        thread = threading.Thread(target=merge_videos_thread)
+        thread.daemon = True
+        thread.start()
+
+        return jsonify({
+            'success': True,
+            'message': '视频合并任务已提交',
+            'task_id': new_task_id
+        })
+
+    except Exception as e:
+        logger.error(f"合并视频API出错: {str(e)}")
+        return jsonify({'error': f'合并视频出错: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)

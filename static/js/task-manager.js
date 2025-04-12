@@ -6,6 +6,153 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load tasks
     loadTasks();
 
+    // 选中的视频任务ID
+    let selectedVideoTasks = [];
+
+    // 合并视频按钮
+    const mergeVideosBtn = document.getElementById('mergeVideosBtn');
+
+    // 检查ffmpeg是否可用
+    checkFFmpegAvailability();
+
+    // 全选复选框
+    const selectAllVideos = document.getElementById('selectAllVideos');
+    if (selectAllVideos) {
+        selectAllVideos.addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('.video-select-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+                // 触发change事件以更新选中状态
+                const event = new Event('change');
+                checkbox.dispatchEvent(event);
+            });
+        });
+    }
+
+    // 合并视频按钮点击事件
+    if (mergeVideosBtn) {
+        mergeVideosBtn.addEventListener('click', function() {
+            if (selectedVideoTasks.length < 2) {
+                alert('请至少选择两个视频任务进行合并');
+                return;
+            }
+
+            // 确认合并
+            if (!confirm(`确定要合并选中的 ${selectedVideoTasks.length} 个视频吗？`)) {
+                return;
+            }
+
+            // 禁用按钮并显示加载状态
+            mergeVideosBtn.disabled = true;
+            mergeVideosBtn.innerHTML = '<i class="bi bi-collection-play"></i> <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+
+            // 显示状态消息
+            const statusElement = document.getElementById('statusMessage');
+            if (statusElement) {
+                statusElement.textContent = '正在提交视频合并任务...';
+                statusElement.classList.remove('d-none');
+            }
+
+            // 获取保存的 API Key
+            const apiKey = localStorage.getItem('siliconflow_api_key') || '';
+
+            // 调用合并视频API
+            fetch('/api/merge_videos', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    task_ids: selectedVideoTasks,
+                    api_key: apiKey
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(errorData => {
+                        throw new Error(errorData.error || `服务器错误: ${response.status}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('合并视频结果:', data);
+
+                // 更新状态消息
+                if (statusElement) {
+                    statusElement.textContent = data.message || '视频合并任务已提交';
+                    setTimeout(() => {
+                        statusElement.classList.add('d-none');
+                    }, 3000);
+                }
+
+                // 重新加载任务列表
+                refreshTasksWithVideoCheck();
+
+                // 清空选中的视频
+                selectedVideoTasks = [];
+                updateMergeButtonState();
+
+                // 取消全选
+                if (selectAllVideos) {
+                    selectAllVideos.checked = false;
+                }
+            })
+            .catch(error => {
+                console.error('合并视频时出错:', error);
+
+                // 更新状态消息
+                if (statusElement) {
+                    statusElement.textContent = '合并视频时出错';
+                    statusElement.classList.remove('d-none');
+                    setTimeout(() => {
+                        statusElement.classList.add('d-none');
+                    }, 3000);
+                }
+
+                // 检查是否是ffmpeg不可用的错误
+                if (error.message && error.message.includes('ffmpeg')) {
+                    alert('无法合并视频: ' + error.message + '\n\n请安装ffmpeg后再尝试。');
+                } else {
+                    alert('合并视频时出错: ' + error.message);
+                }
+            })
+            .finally(() => {
+                // 恢复按钮状态
+                mergeVideosBtn.disabled = (selectedVideoTasks.length < 2);
+                mergeVideosBtn.innerHTML = '<i class="bi bi-collection-play"></i> 合并选中视频';
+            });
+        });
+    }
+
+    // 更新合并按钮状态的函数
+    function updateMergeButtonState() {
+        if (mergeVideosBtn) {
+            mergeVideosBtn.disabled = (selectedVideoTasks.length < 2);
+        }
+    }
+
+    // 处理视频选择变化的函数
+    function handleVideoSelectionChange(taskId, checked) {
+        console.log(`视频选择变化: taskId=${taskId}, checked=${checked}`);
+        console.log('选择前的视频列表:', [...selectedVideoTasks]);
+
+        if (checked) {
+            // 添加到选中列表（如果不存在）
+            if (!selectedVideoTasks.includes(taskId)) {
+                selectedVideoTasks.push(taskId);
+            }
+        } else {
+            // 从选中列表中移除
+            selectedVideoTasks = selectedVideoTasks.filter(id => id !== taskId);
+        }
+
+        console.log('选择后的视频列表:', [...selectedVideoTasks]);
+
+        // 更新合并按钮状态
+        updateMergeButtonState();
+    }
+
     // Set up check all videos button
     const checkAllVideosBtn = document.getElementById('checkAllVideosBtn');
     if (checkAllVideosBtn) {
@@ -61,7 +208,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Set up auto-refresh
-    setInterval(() => refreshTasksWithVideoCheck(), 3000); // 每3秒刷新一次
+    setInterval(() => refreshTasksWithVideoCheck(), 10000); // 每10秒刷新一次
 
     // Task details modal
     const taskDetailsModal = new bootstrap.Modal(document.getElementById('taskDetailsModal'));
@@ -70,6 +217,16 @@ document.addEventListener('DOMContentLoaded', function() {
     // 刷新任务并检查视频的函数
     async function refreshTasksWithVideoCheck() {
         try {
+            // 记录当前选中的视频列表，用于调试
+            console.log('刷新前选中的视频列表:', [...selectedVideoTasks]);
+
+            // 显示状态消息
+            const statusElement = document.getElementById('statusMessage');
+            if (statusElement && !statusElement.textContent) {
+                statusElement.textContent = '正在加载任务列表...';
+                statusElement.classList.remove('d-none');
+            }
+
             // 首先加载所有任务
             const tasks = await fetchAllTasks();
 
@@ -78,6 +235,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // 更新任务列表显示
             updateTasksList(tasks);
+
+            // 隐藏状态消息
+            if (statusElement && statusElement.textContent === '正在加载任务列表...') {
+                statusElement.classList.add('d-none');
+            }
 
             // 找出所有未完成但应该有视频的任务
             const tasksToCheck = tasks.filter(task => {
@@ -231,15 +393,70 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 获取所有任务
     async function fetchAllTasks() {
-        const response = await fetch('/api/tasks');
-        if (!response.ok) {
-            throw new Error('网络响应异常');
+        try {
+            console.log('开始获取任务列表...');
+
+            // 设置请求超时
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+
+            try {
+                const response = await fetch('/api/tasks', {
+                    signal: controller.signal,
+                    cache: 'no-store' // 禁用缓存，确保每次都获取最新数据
+                });
+
+                // 清除超时定时器
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    let errorMessage = `网络响应异常 (${response.status})`;
+                    try {
+                        // 尝试解析错误消息
+                        const errorData = await response.json();
+                        if (errorData && errorData.error) {
+                            errorMessage = errorData.error;
+                        }
+                    } catch (e) {
+                        // 如果无法解析JSON，尝试获取文本
+                        try {
+                            const errorText = await response.text();
+                            if (errorText) {
+                                errorMessage = errorText;
+                            }
+                        } catch (textError) {
+                            console.error('无法获取错误消息文本:', textError);
+                        }
+                    }
+
+                    console.error(`获取任务列表失败: HTTP ${response.status}`, errorMessage);
+                    throw new Error(errorMessage);
+                }
+
+                const data = await response.json();
+                console.log(`成功获取任务列表，共 ${data.length} 条任务`);
+                return data;
+            } catch (fetchError) {
+                // 清除超时定时器
+                clearTimeout(timeoutId);
+
+                // 如果是超时错误
+                if (fetchError.name === 'AbortError') {
+                    console.error('获取任务列表超时');
+                    throw new Error('获取任务列表超时，请检查网络连接并重试');
+                }
+
+                throw fetchError;
+            }
+        } catch (error) {
+            console.error('获取任务列表时出错:', error);
+            throw error;
         }
-        return await response.json();
     }
 
     // 更新任务列表显示
     function updateTasksList(tasks) {
+        console.log('更新任务列表前选中的视频:', [...selectedVideoTasks]);
         const tasksList = document.getElementById('tasksList');
 
         if (!tasksList) return;
@@ -271,9 +488,17 @@ document.addEventListener('DOMContentLoaded', function() {
         function generateTaskRow(task, isChild = false) {
             const statusClass = getStatusClass(task.status);
             const statusText = getStatusText(task.status);
+            const hasVideo = task.video_path && task.status === 'completed';
 
             return `
                 <tr class="task-row ${isChild ? 'child-task' : ''}" data-task-id="${task.id}">
+                    <td>
+                        ${hasVideo ?
+                            `<div class="form-check">
+                                <input class="form-check-input video-select-checkbox" type="checkbox" value="${task.id}" data-task-id="${task.id}" ${selectedVideoTasks.includes(task.id) ? 'checked' : ''}>
+                            </div>` :
+                            ''}
+                    </td>
                     <td>
                         ${isChild ? '<div class="ms-4">' : ''}
                         ${task.image_path ?
@@ -365,24 +590,79 @@ document.addEventListener('DOMContentLoaded', function() {
         // 为任务行添加事件监听器
         document.querySelectorAll('.task-row').forEach(row => {
             row.addEventListener('click', function(e) {
-                // 只在点击不是按钮或链接时触发
-                if (!e.target.closest('button') && !e.target.closest('a')) {
+                // 只在点击不是按钮、链接或复选框时触发
+                if (!e.target.closest('button') && !e.target.closest('a') && !e.target.closest('.form-check')) {
                     const taskId = this.getAttribute('data-task-id');
                     showTaskDetails(taskId);
                 }
+            });
+        });
+
+        // 为视频选择复选框添加事件监听器
+        document.querySelectorAll('.video-select-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const taskId = this.getAttribute('data-task-id');
+                handleVideoSelectionChange(taskId, this.checked);
             });
         });
     }
 
     // 加载任务的函数 (兼容旧代码)
     function loadTasks() {
-        refreshTasksWithVideoCheck().catch(error => {
-            console.error('Error:', error);
-            const tasksList = document.getElementById('tasksList');
-            if (tasksList) {
-                tasksList.innerHTML = '<tr><td colspan="5" class="text-center py-4"><p class="text-danger">加载任务失败</p></td></tr>';
-            }
-        });
+        // 显示加载中的提示
+        const tasksList = document.getElementById('tasksList');
+        if (tasksList) {
+            tasksList.innerHTML = '<tr><td colspan="5" class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">加载中...</span></div><p class="mt-2 text-muted">正在加载任务列表...</p></td></tr>';
+        }
+
+        // 添加重试逻辑
+        let retryCount = 0;
+        const maxRetries = 3;
+
+        function attemptLoad() {
+            refreshTasksWithVideoCheck().catch(error => {
+                console.error('Error loading tasks:', error);
+                retryCount++;
+
+                if (retryCount < maxRetries) {
+                    console.log(`尝试重新加载任务列表 (第 ${retryCount} 次重试)...`);
+                    // 显示重试中的提示
+                    if (tasksList) {
+                        tasksList.innerHTML = `<tr><td colspan="5" class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">重试中...</span></div><p class="mt-2 text-muted">正在重试加载任务列表 (第 ${retryCount} 次重试)...</p></td></tr>`;
+                    }
+
+                    // 等待一秒后重试
+                    setTimeout(attemptLoad, 1000);
+                } else {
+                    // 重试次数用完，显示错误消息
+                    if (tasksList) {
+                        tasksList.innerHTML = '<tr><td colspan="5" class="text-center py-4"><p class="text-danger">加载任务失败</p><button id="retryLoadTasksBtn" class="btn btn-sm btn-outline-primary mt-2">重新加载</button></td></tr>';
+
+                        // 添加重新加载按钮的点击事件
+                        const retryBtn = document.getElementById('retryLoadTasksBtn');
+                        if (retryBtn) {
+                            retryBtn.addEventListener('click', function() {
+                                retryCount = 0; // 重置重试计数
+                                loadTasks(); // 重新加载任务
+                            });
+                        }
+                    }
+
+                    // 显示错误消息
+                    const statusElement = document.getElementById('statusMessage');
+                    if (statusElement) {
+                        statusElement.textContent = '加载任务失败，请刷新页面或点击重新加载按钮';
+                        statusElement.classList.remove('d-none');
+                        setTimeout(() => {
+                            statusElement.classList.add('d-none');
+                        }, 5000);
+                    }
+                }
+            });
+        }
+
+        // 开始加载
+        attemptLoad();
     }
 
     // 显示任务详情的函数
@@ -527,6 +807,7 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'generating_video':
             case 'waiting_for_video':
             case 'extending_video':
+            case 'merging_videos':
                 return 'bg-info';
             default:
                 return 'bg-info';
@@ -554,6 +835,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 return '等待视频生成';
             case 'extending_video':
                 return '延长视频中';
+            case 'merging_videos':
+                return '合并视频中';
             default:
                 return status;
         }
@@ -561,7 +844,81 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 格式化日期的辅助函数
     function formatDate(dateString) {
-        return moment(dateString).format('YYYY-MM-DD HH:mm:ss');
+        try {
+            // 检查moment是否可用
+            if (typeof moment === 'function') {
+                return moment(dateString).format('YYYY-MM-DD HH:mm:ss');
+            }
+
+            // 如果moment不可用，使用原生方法
+            const date = new Date(dateString);
+            return date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+        } catch (error) {
+            console.error('格式化日期时出错:', error);
+            // 返回原始字符串
+            return dateString || '';
+        }
+    }
+
+    // 检查ffmpeg是否可用
+    async function checkFFmpegAvailability() {
+        try {
+            // 获取保存的 API Key
+            const apiKey = localStorage.getItem('siliconflow_api_key') || '';
+
+            // 调用合并视频API，但不提交任务，只是检查ffmpeg是否可用
+            const response = await fetch('/api/merge_videos', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    task_ids: ['test1', 'test2'],  // 使用虚拟的任务ID
+                    api_key: apiKey
+                })
+            });
+
+            const data = await response.json();
+            console.log('检查ffmpeg可用性结果:', data);
+
+            // 如果返回的错误代码是 ffmpeg_not_available，则禁用合并视频按钮
+            if (data.code === 'ffmpeg_not_available') {
+                const mergeVideosBtn = document.getElementById('mergeVideosBtn');
+                if (mergeVideosBtn) {
+                    mergeVideosBtn.disabled = true;
+                    mergeVideosBtn.title = '需要安装ffmpeg才能使用视频合并功能';
+                    mergeVideosBtn.innerHTML = '<i class="bi bi-collection-play"></i> 合并视频 (需要ffmpeg)';
+
+                    // 显示提示消息
+                    const statusElement = document.getElementById('statusMessage');
+                    if (statusElement) {
+                        statusElement.textContent = '视频合并功能已禁用，需要安装ffmpeg';
+                        statusElement.classList.remove('d-none');
+                        setTimeout(() => {
+                            statusElement.classList.add('d-none');
+                        }, 5000);
+                    }
+                }
+            } else if (data.success) {
+                // ffmpeg可用，确保合并按钮正常工作
+                console.log('ffmpeg可用，路径:', data.ffmpeg_path);
+                const mergeVideosBtn = document.getElementById('mergeVideosBtn');
+                if (mergeVideosBtn) {
+                    // 按钮状态将由选中的视频数量决定
+                    updateMergeButtonState();
+                }
+            }
+        } catch (error) {
+            console.error('检查ffmpeg可用性时出错:', error);
+        }
     }
 
     // 删除任务的函数

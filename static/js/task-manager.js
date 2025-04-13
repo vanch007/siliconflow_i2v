@@ -256,11 +256,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     'video_path不存在': !task.video_path,
                     '状态不是completed': task.status !== 'completed',
                     '状态不是failed': task.status !== 'failed',
+                    '父任务ID': task.parent_task_id || '无',
                     '最终结果': shouldCheck
                 });
 
                 return shouldCheck;
             });
+
+            // 打印需要检查的任务数量
+            console.log(`需要检查的任务数量: ${tasksToCheck.length}`);
+            if (tasksToCheck.length > 0) {
+                console.log('需要检查的任务:', tasksToCheck);
+            }
 
             // 如果有需要检查的任务
             if (tasksToCheck.length > 0) {
@@ -472,6 +479,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // 先分类任务
         tasks.forEach(task => {
+            // 调试信息：打印每个任务的ID和父任务ID
+            console.log(`任务ID: ${task.id}, 父任务ID: ${task.parent_task_id || '无'}, 状态: ${task.status}`);
+
             if (!task.parent_task_id) {
                 rootTasks.push(task);
             } else {
@@ -482,16 +492,22 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
+        // 调试信息：打印根任务和子任务的数量
+        console.log(`根任务数量: ${rootTasks.length}`);
+        console.log('子任务映射:', childTasks);
+
         let html = '';
 
         // 生成任务行 HTML
-        function generateTaskRow(task, isChild = false) {
+        function generateTaskRow(task, isChild = false, level = 1) {
             const statusClass = getStatusClass(task.status);
             const statusText = getStatusText(task.status);
             const hasVideo = task.video_path && task.status === 'completed';
+            // 根据层级计算缩进的像素值
+            const indentSize = level * 40; // 每一层级增加 40px 缩进，增大缩进距离
 
             return `
-                <tr class="task-row ${isChild ? 'child-task' : ''}" data-task-id="${task.id}">
+                <tr class="task-row ${isChild ? 'child-task bg-light' : ''}" data-task-id="${task.id}">
                     <td>
                         ${hasVideo ?
                             `<div class="form-check">
@@ -500,38 +516,49 @@ document.addEventListener('DOMContentLoaded', function() {
                             ''}
                     </td>
                     <td>
-                        ${isChild ? '<div class="ms-4">' : ''}
+                        ${isChild ? `<div style="margin-left: ${indentSize}px;">` : ''}
                         ${task.image_path ?
                             `<img src="/uploads/${task.image_path}" class="task-image-thumbnail" alt="任务图片">` :
                             '无图片'}
                         ${isChild ? '</div>' : ''}
                     </td>
                     <td>
-                        ${isChild ? '<div class="ms-4">' : ''}
+                        ${isChild ? `<div style="margin-left: ${indentSize}px;">` : ''}
                         <span class="badge ${statusClass}">${statusText}</span>
                         <small class="d-block mt-1 text-muted text-truncate" style="max-width: 200px;">${task.message || ''}</small>
                         ${isChild ? '</div>' : ''}
                     </td>
                     <td>${formatDate(task.created_at)}</td>
                     <td>
-                        <div class="d-flex gap-1 flex-wrap">
-                            <button class="btn btn-sm btn-outline-secondary view-details-btn" data-task-id="${task.id}">
-                                详情
-                            </button>
-                            ${task.video_path ?
-                                `<a href="/preview/${task.id}" class="btn btn-sm btn-primary">预览</a>` :
-                                ''}
-                            <button class="btn btn-sm btn-outline-primary regenerate-btn" data-task-id="${task.id}">
-                                再次生成
-                            </button>
-                            ${task.video_path ?
-                                `<button class="btn btn-sm btn-outline-info last-frame-btn" data-task-id="${task.id}">
-                                    使用最后一帧
-                                </button>` :
-                                ''}
-                            <button class="btn btn-sm btn-outline-danger delete-task-btn" data-task-id="${task.id}">
-                                删除
-                            </button>
+                        <div class="task-actions">
+                            <div class="action-group">
+                                <button class="btn btn-outline-secondary view-details-btn" data-task-id="${task.id}">
+                                    <i class="bi bi-info-circle-fill"></i> 详情
+                                </button>
+                                ${task.video_path ?
+                                    `<a href="/preview/${task.id}" class="btn btn-primary"><i class="bi bi-play-circle-fill"></i> 预览</a>` :
+                                    ''}
+                            </div>
+
+                            <div class="action-group">
+                                <button class="btn btn-outline-primary regenerate-btn" data-task-id="${task.id}">
+                                    <i class="bi bi-arrow-clockwise"></i> 再次生成
+                                </button>
+                                ${task.video_path ?
+                                    `<button class="btn btn-outline-info last-frame-btn" data-task-id="${task.id}">
+                                        <i class="bi bi-film"></i> 最后一帧
+                                    </button>` :
+                                    ''}
+                            </div>
+
+                            <div class="action-group">
+                                <button class="btn btn-outline-secondary open-folder-btn" data-task-id="${task.id}" data-type="video">
+                                    <i class="bi bi-folder2-open"></i> 文件夹
+                                </button>
+                                <button class="btn btn-outline-danger delete-task-btn" data-task-id="${task.id}">
+                                    <i class="bi bi-trash3-fill"></i> 删除
+                                </button>
+                            </div>
                         </div>
                     </td>
                 </tr>
@@ -542,12 +569,19 @@ document.addEventListener('DOMContentLoaded', function() {
         rootTasks.forEach(task => {
             html += generateTaskRow(task);
 
-            // 添加子任务
-            if (childTasks[task.id]) {
-                childTasks[task.id].forEach(childTask => {
-                    html += generateTaskRow(childTask, true);
-                });
+            // 递归添加子任务及其子任务
+            function addChildTasks(parentId, level = 1) {
+                if (childTasks[parentId]) {
+                    childTasks[parentId].forEach(childTask => {
+                        html += generateTaskRow(childTask, true, level);
+                        // 递归添加子任务的子任务
+                        addChildTasks(childTask.id, level + 1);
+                    });
+                }
             }
+
+            // 开始递归添加子任务
+            addChildTasks(task.id);
         });
 
         tasksList.innerHTML = html;
@@ -584,6 +618,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 e.stopPropagation(); // 阻止事件冒泡
                 const taskId = this.getAttribute('data-task-id');
                 regenerateFromLastFrame(taskId);
+            });
+        });
+
+        // 为打开文件夹按钮添加事件监听器
+        document.querySelectorAll('.open-folder-btn').forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.preventDefault(); // 阻止默认行为
+                e.stopPropagation(); // 阻止事件冒泡
+                const taskId = this.getAttribute('data-task-id');
+                const folderType = this.getAttribute('data-type') || 'auto';
+                openTaskFolder(taskId, folderType);
             });
         });
 
@@ -730,7 +775,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             `<h6 class="mb-3">原始图片</h6>
                             <div class="text-center">
                                 <img src="/uploads/${task.image_path}" class="img-fluid rounded" alt="原始图片" style="max-height: 200px;">
-                            </div>` :
+                            </div>
+` :
                             ''}
                     </div>
                 </div>
@@ -764,9 +810,14 @@ document.addEventListener('DOMContentLoaded', function() {
                             </div>
                             <div class="d-flex justify-content-between align-items-center mt-2">
                                 <span class="text-muted small">生成于 ${formatDate(task.updated_at)}</span>
-                                <a href="/output/${task.video_path}" download class="btn btn-sm btn-primary">
-                                    <i class="bi bi-download"></i> 下载视频
-                                </a>
+                                <div>
+                                    <a href="/output/${task.video_path}" download class="btn btn-sm btn-primary me-2">
+                                        <i class="bi bi-download"></i> 下载视频
+                                    </a>
+                                    <button class="btn btn-sm btn-outline-secondary open-folder-btn" data-task-id="${task.id}" data-type="video">
+                                        <i class="bi bi-folder2-open"></i> 打开视频文件夹
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -836,7 +887,7 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'extending_video':
                 return '延长视频中';
             case 'merging_videos':
-                return '合并视频中';
+                return '视频合成中';
             default:
                 return status;
         }
@@ -1012,51 +1063,179 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // 打开任务文件夹的函数
+    async function openTaskFolder(taskId, folderType = 'auto') {
+        try {
+            // 显示加载中的提示
+            const statusElement = document.getElementById('statusMessage');
+            if (statusElement) {
+                statusElement.textContent = '正在打开文件夹...';
+                statusElement.classList.remove('d-none');
+            }
+
+            // 调用打开文件夹API
+            const response = await fetch(`/api/tasks/${taskId}/open_folder?type=${folderType}`);
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || '打开文件夹失败');
+            }
+
+            const result = await response.json();
+            console.log('打开文件夹结果:', result);
+
+            // 显示成功消息
+            if (statusElement) {
+                statusElement.textContent = result.message || '文件夹已打开';
+                setTimeout(() => {
+                    statusElement.classList.add('d-none');
+                }, 3000);
+            }
+
+        } catch (error) {
+            console.error('打开文件夹时出错:', error);
+            alert(`打开文件夹失败: ${error.message}`);
+
+            // 隐藏状态消息
+            const statusElement = document.getElementById('statusMessage');
+            if (statusElement) {
+                statusElement.classList.add('d-none');
+            }
+        }
+    }
+
     // 使用最后一帧再次生成的函数
     async function regenerateFromLastFrame(taskId) {
         try {
             // 显示加载中的提示
             const statusElement = document.getElementById('statusMessage');
             if (statusElement) {
-                statusElement.textContent = '正在提取视频最后一帧并准备生成...';
+                statusElement.textContent = '正在获取任务信息...';
                 statusElement.classList.remove('d-none');
             }
 
-            // 获取保存的 API Key
-            const apiKey = localStorage.getItem('siliconflow_api_key') || '';
+            // 首先获取原任务的提示词
+            const taskResponse = await fetch(`/api/tasks/${taskId}`);
+            if (!taskResponse.ok) {
+                throw new Error('获取任务信息失败');
+            }
 
-            // 调用使用最后一帧再次生成API
-            const response = await fetch(`/api/tasks/${taskId}/regenerate_from_last_frame`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    api_key: apiKey
-                })
+            const taskData = await taskResponse.json();
+            console.log('获取到的任务信息:', taskData);
+
+            // 隐藏状态消息
+            if (statusElement) {
+                statusElement.classList.add('d-none');
+            }
+
+            // 显示风格提示词确认模态框
+            const promptModal = new bootstrap.Modal(document.getElementById('promptConfirmModal'));
+            const stylePromptTextarea = document.getElementById('stylePrompt');
+            const lastFrameTaskIdInput = document.getElementById('lastFrameTaskId');
+            const lastFramePreviewImg = document.getElementById('lastFramePreview');
+            const lastFrameImagePathInput = document.getElementById('lastFrameImagePath');
+
+            // 设置原始提示词和任务ID
+            stylePromptTextarea.value = taskData.prompt || '';
+            lastFrameTaskIdInput.value = taskId;
+
+            // 设置图片预览
+            if (taskData.video_path) {
+                // 如果有视频，则显示视频的最后一帧作为预览
+                // 我们使用一个特殊的API端点来获取最后一帧
+                lastFramePreviewImg.src = `/api/tasks/${taskId}/last_frame?t=${new Date().getTime()}`;
+                lastFramePreviewImg.alt = '视频最后一帧';
+                lastFrameImagePathInput.value = `last_frame_${taskId}.jpg`;
+            } else if (taskData.image_path) {
+                // 如果没有视频但有原始图片，则显示原始图片
+                lastFramePreviewImg.src = `/uploads/${taskData.image_path}`;
+                lastFramePreviewImg.alt = '原始图片';
+                lastFrameImagePathInput.value = taskData.image_path;
+            } else {
+                // 如果都没有，显示一个占位图片
+                lastFramePreviewImg.src = '/static/img/no-image.png';
+                lastFramePreviewImg.alt = '无可用图片';
+                lastFrameImagePathInput.value = '';
+            }
+
+            // 显示模态框
+            promptModal.show();
+
+            // 为确认按钮添加事件监听器
+            const confirmPromptBtn = document.getElementById('confirmPromptBtn');
+
+            // 移除现有的事件监听器，防止重复添加
+            const newConfirmBtn = confirmPromptBtn.cloneNode(true);
+            confirmPromptBtn.parentNode.replaceChild(newConfirmBtn, confirmPromptBtn);
+
+            // 添加新的事件监听器
+            newConfirmBtn.addEventListener('click', async () => {
+                // 关闭模态框
+                promptModal.hide();
+
+                // 显示加载中的提示
+                if (statusElement) {
+                    statusElement.textContent = '正在提取视频最后一帧并准备生成...';
+                    statusElement.classList.remove('d-none');
+                }
+
+                // 获取保存的 API Key 和用户修改后的提示词
+                const apiKey = localStorage.getItem('siliconflow_api_key') || '';
+                const userPrompt = document.getElementById('stylePrompt').value;
+
+                // 调用使用最后一帧再次生成API
+                try {
+                    const response = await fetch(`/api/tasks/${taskId}/regenerate_from_last_frame`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            api_key: apiKey,
+                            prompt: userPrompt // 传递用户修改后的提示词
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || '使用最后一帧再次生成失败');
+                    }
+
+                    const result = await response.json();
+                    console.log('使用最后一帧生成的新任务:', result);
+
+                    // 显示成功消息
+                    if (statusElement) {
+                        statusElement.textContent = result.message || '任务已成功提交，使用最后一帧再次生成';
+                        setTimeout(() => {
+                            statusElement.classList.add('d-none');
+                        }, 3000);
+                    }
+
+                    // 立即刷新任务列表，以显示新创建的任务
+                    console.log('刷新任务列表以显示新创建的任务...');
+                    await refreshTasksWithVideoCheck();
+
+                    // 再次刷新任务列表，确保新任务显示
+                    setTimeout(async () => {
+                        console.log('再次刷新任务列表...');
+                        await refreshTasksWithVideoCheck();
+                    }, 1000);
+
+                } catch (error) {
+                    console.error('使用最后一帧再次生成时出错:', error);
+                    alert(`使用最后一帧再次生成失败: ${error.message}`);
+
+                    // 隐藏状态消息
+                    if (statusElement) {
+                        statusElement.classList.add('d-none');
+                    }
+                }
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || '使用最后一帧再次生成失败');
-            }
-
-            const result = await response.json();
-
-            // 显示成功消息
-            if (statusElement) {
-                statusElement.textContent = result.message || '任务已成功提交，使用最后一帧再次生成';
-                setTimeout(() => {
-                    statusElement.classList.add('d-none');
-                }, 3000);
-            }
-
-            // 刷新任务列表
-            refreshTasksWithVideoCheck();
-
         } catch (error) {
-            console.error('使用最后一帧再次生成时出错:', error);
-            alert(`使用最后一帧再次生成失败: ${error.message}`);
+            console.error('准备使用最后一帧再次生成时出错:', error);
+            alert(`准备使用最后一帧再次生成失败: ${error.message}`);
 
             // 隐藏状态消息
             const statusElement = document.getElementById('statusMessage');

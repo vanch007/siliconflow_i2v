@@ -27,7 +27,7 @@ except ImportError:
     print("\033[93m未安装python-dotenv库，无法加载.env文件\033[0m")
     print("\033[93m可以使用 'pip install python-dotenv' 安装\033[0m")
 
-from flask import Flask, render_template, request, jsonify, send_from_directory, url_for, redirect
+from flask import Flask, render_template, request, jsonify, send_from_directory, url_for, redirect, send_file
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -838,13 +838,95 @@ def regenerate_task(task_id):
         logger.error(f"再次生成任务时出错: {str(e)}")
         return jsonify({'error': f'再次生成任务时出错: {str(e)}'}), 500
 
+@app.route('/api/tasks/<task_id>/last_frame', methods=['GET'])
+def get_last_frame(task_id):
+    """Get the last frame of a video task."""
+    try:
+        # 获取任务信息
+        db = get_db()
+        task = db.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
+
+        if not task:
+            return jsonify({'error': '任务不存在'}), 404
+
+        # 检查任务是否有视频
+        if not task['video_path']:
+            return jsonify({'error': '任务没有生成的视频'}), 400
+
+        # 获取视频路径
+        video_path = os.path.join(app.config['OUTPUT_FOLDER'], task['video_path'])
+        if not os.path.exists(video_path):
+            return jsonify({'error': '视频文件不存在'}), 404
+
+        # 生成最后一帧的缓存文件名
+        last_frame_filename = f"last_frame_{task_id}.jpg"
+        last_frame_path = os.path.join(app.config['UPLOAD_FOLDER'], last_frame_filename)
+
+        # 如果缓存文件已存在且不是强制刷新，直接返回
+        if os.path.exists(last_frame_path) and not request.args.get('refresh'):
+            return send_file(last_frame_path, mimetype='image/jpeg')
+
+        # 使用OpenCV提取最后一帧
+        import cv2
+        logger.info(f"正在使用OpenCV提取视频最后一帧: {video_path}")
+
+        # 打开视频文件
+        cap = cv2.VideoCapture(video_path)
+
+        # 检查视频是否成功打开
+        if not cap.isOpened():
+            logger.error(f"无法打开视频文件: {video_path}")
+            # 返回默认的无图片占位图
+            return send_file('static/img/no-image.png', mimetype='image/png')
+
+        # 获取视频总帧数
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        logger.info(f"视频总帧数: {total_frames}")
+
+        if total_frames <= 0:
+            logger.error("视频没有帧")
+            # 返回默认的无图片占位图
+            return send_file('static/img/no-image.png', mimetype='image/png')
+
+        # 定位到最后一帧
+        cap.set(cv2.CAP_PROP_POS_FRAMES, total_frames - 1)
+
+        # 读取最后一帧
+        ret, frame = cap.read()
+
+        # 释放视频资源
+        cap.release()
+
+        if not ret:
+            logger.error("无法读取视频最后一帧")
+            # 返回默认的无图片占位图
+            return send_file('static/img/no-image.png', mimetype='image/png')
+
+        # 保存最后一帧为图片
+        cv2.imwrite(last_frame_path, frame)
+        logger.info(f"成功提取并保存最后一帧: {last_frame_path}")
+
+        if not os.path.exists(last_frame_path):
+            # 返回默认的无图片占位图
+            return send_file('static/img/no-image.png', mimetype='image/png')
+
+        # 返回图片
+        return send_file(last_frame_path, mimetype='image/jpeg')
+
+    except Exception as e:
+        logger.error(f"获取视频最后一帧时出错: {str(e)}")
+        # 返回默认的无图片占位图
+        return send_file('static/img/no-image.png', mimetype='image/png')
+
 @app.route('/api/tasks/<task_id>/regenerate_from_last_frame', methods=['POST'])
 def regenerate_from_last_frame(task_id):
     """Regenerate a task using the last frame of the video as the input image."""
     try:
-        # 获取API Key
+        # 获取API Key和用户提供的提示词
         data = request.json or {}
         api_key = data.get('api_key', None)
+        user_prompt = data.get('prompt', None)  # 获取用户提供的提示词
+
         # 获取任务信息
         db = get_db()
         task = db.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
@@ -912,7 +994,9 @@ def regenerate_from_last_frame(task_id):
 
             # 获取原始任务的参数
             model = task['model'] if 'model' in task.keys() and task['model'] else I2V_MODEL
-            prompt = task['prompt'] if 'prompt' in task.keys() and task['prompt'] else None
+
+            # 使用用户提供的提示词，如果没有则使用原始任务的提示词
+            prompt = user_prompt if user_prompt else (task['prompt'] if 'prompt' in task.keys() and task['prompt'] else None)
 
             # 创建新任务记录
             db.execute(
@@ -1034,7 +1118,8 @@ def check_all_videos():
             logger.info(f"检查任务 {task_id} 的视频状态，request_id: {request_id}")
 
             # 使用优化后的get_video_status函数获取视频状态
-            api_key = request.json.get('api_key', None)
+            # 从查询参数中获取API密钥，而不是JSON正文
+            api_key = request.args.get('api_key', None)
             video_info = get_video_status(request_id, api_key=api_key)
 
             # 如果获取到视频信息，则下载并更新任务
@@ -1068,11 +1153,14 @@ def check_all_videos():
         logger.error(f"检查所有视频时出错: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/tasks/<task_id>/update_video', methods=['POST'])
-def update_task_video():
+@app.route('/api/tasks/<string:task_id>/update_video', methods=['POST'])
+def update_task_video(task_id):
     """Update task with video URL."""
     try:
-        task_id = request.view_args['task_id']
+        # 确保我们有task_id参数
+        if not task_id:
+            return jsonify({'error': '缺少task_id参数'}), 400
+
         data = request.json
         video_url = data.get('video_url')
 
@@ -1183,8 +1271,10 @@ def merge_videos_api():
         db = get_db()
         video_paths = []
         task_prompts = []
+        first_task_image_path = None  # 用于存储第一个任务的图片路径
+        first_task_model = None  # 用于存储第一个任务的模型
 
-        for task_id in task_ids:
+        for i, task_id in enumerate(task_ids):
             task = db.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
 
             if not task:
@@ -1204,6 +1294,13 @@ def merge_videos_api():
             if task['prompt']:
                 task_prompts.append(task['prompt'])
 
+            # 保存第一个任务的图片路径和模型
+            if i == 0:
+                first_task_image_path = task['image_path']
+                # 如果任务有model字段，则保存
+                if 'model' in task.keys():
+                    first_task_model = task['model']
+
         # 合并提示词
         merged_prompt = None
         if task_prompts:
@@ -1215,10 +1312,27 @@ def merge_videos_api():
         new_task_id = str(uuid.uuid4())
 
         # 创建新任务记录
-        db.execute(
-            'INSERT INTO tasks (id, status, message, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-            (new_task_id, 'merging_videos', '正在合并视频...', datetime.now().isoformat(), datetime.now().isoformat())
-        )
+        # 创建合并视频的任务消息
+        merge_message = f'正在合成 {len(video_paths)} 个视频...'  # 更清晰的消息
+
+        if first_task_image_path and first_task_model:
+            # 如果有第一个任务的图片路径和模型，一起保存
+            db.execute(
+                'INSERT INTO tasks (id, status, message, image_path, model, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                (new_task_id, 'merging_videos', merge_message, first_task_image_path, first_task_model, datetime.now().isoformat(), datetime.now().isoformat())
+            )
+        elif first_task_image_path:
+            # 如果只有第一个任务的图片路径
+            db.execute(
+                'INSERT INTO tasks (id, status, message, image_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+                (new_task_id, 'merging_videos', merge_message, first_task_image_path, datetime.now().isoformat(), datetime.now().isoformat())
+            )
+        else:
+            # 如果没有第一个任务的图片路径
+            db.execute(
+                'INSERT INTO tasks (id, status, message, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+                (new_task_id, 'merging_videos', merge_message, datetime.now().isoformat(), datetime.now().isoformat())
+            )
         db.commit()
 
         # 启动后台线程合并视频
@@ -1233,7 +1347,7 @@ def merge_videos_api():
                         return
 
                     # 更新任务状态和视频路径
-                    update_task_status(new_task_id, 'completed', '视频合并成功')
+                    update_task_status(new_task_id, 'completed', f'视频合成成功，合成了 {len(video_paths)} 个视频')
                     update_task_video_path(new_task_id, os.path.basename(merged_path))
 
                     # 如果有合并的提示词，更新任务提示词
@@ -1258,6 +1372,65 @@ def merge_videos_api():
     except Exception as e:
         logger.error(f"合并视频API出错: {str(e)}")
         return jsonify({'error': f'合并视频出错: {str(e)}'}), 500
+
+@app.route('/api/tasks/<task_id>/open_folder', methods=['GET'])
+def open_task_folder(task_id):
+    """Open the folder containing task files."""
+    try:
+        # 获取任务信息
+        db = get_db()
+        task = db.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
+
+        if not task:
+            return jsonify({'error': '任务不存在'}), 404
+
+        # 确定要打开的文件夹
+        folder_type = request.args.get('type', 'auto')
+        folder_path = None
+
+        if folder_type == 'image' or (folder_type == 'auto' and task['image_path']):
+            # 打开图片所在文件夹
+            folder_path = os.path.abspath(app.config['UPLOAD_FOLDER'])
+        elif folder_type == 'video' or (folder_type == 'auto' and task['video_path']):
+            # 打开视频所在文件夹
+            folder_path = os.path.abspath(app.config['OUTPUT_FOLDER'])
+        else:
+            # 默认打开输出文件夹
+            folder_path = os.path.abspath(app.config['OUTPUT_FOLDER'])
+
+        if not folder_path or not os.path.exists(folder_path):
+            return jsonify({'error': '文件夹不存在'}), 404
+
+        # 尝试打开文件夹
+        try:
+            # 根据操作系统选择打开文件夹的命令
+            import platform
+            import subprocess
+
+            system = platform.system()
+            if system == 'Windows':
+                # Windows
+                os.startfile(folder_path)
+            elif system == 'Darwin':
+                # macOS
+                subprocess.call(['open', folder_path])
+            else:
+                # Linux
+                subprocess.call(['xdg-open', folder_path])
+
+            return jsonify({
+                'success': True,
+                'message': '已打开文件夹',
+                'folder_path': folder_path
+            })
+
+        except Exception as e:
+            logger.error(f"打开文件夹时出错: {str(e)}")
+            return jsonify({'error': f'打开文件夹时出错: {str(e)}'}), 500
+
+    except Exception as e:
+        logger.error(f"打开任务文件夹时出错: {str(e)}")
+        return jsonify({'error': f'打开任务文件夹时出错: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)

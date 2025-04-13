@@ -15,8 +15,8 @@ API_BASE_URL = "https://api.siliconflow.cn/v1"
 FREE_API_KEY_URL = "https://cloud.siliconflow.cn/i/TToSB555"
 
 # Model Configuration
-VLM_MODEL = "Qwen/Qwen2.5-VL-72B-Instruct"  # Vision Language Model
-LLM_MODEL = "Qwen/QwQ-32B"  # Language Model for prompt refinement
+VLM_MODEL = "deepseek-ai/deepseek-vl2"  # Vision Language Model
+LLM_MODEL = "deepseek-ai/DeepSeek-V3"  # Language Model for prompt refinement
 I2V_MODEL = "Wan-AI/Wan2.1-I2V-14B-720P"  # Image to Video Model
 
 # Video Configuration

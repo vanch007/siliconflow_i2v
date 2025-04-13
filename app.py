@@ -10,6 +10,22 @@ import threading
 import logging
 import time
 from datetime import datetime
+from pathlib import Path
+
+# 尝试加载.env文件中的环境变量
+try:
+    from dotenv import load_dotenv
+    # 尝试加载.env文件
+    env_path = Path('.') / '.env'
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path)
+        print("\033[92m成功加载.env文件\033[0m")
+    else:
+        print("\033[93m未找到.env文件，将使用默认配置\033[0m")
+        print("\033[93m可以复制.env.example文件并重命名为.env，然后填入您的API Key\033[0m")
+except ImportError:
+    print("\033[93m未安装python-dotenv库，无法加载.env文件\033[0m")
+    print("\033[93m可以使用 'pip install python-dotenv' 安装\033[0m")
 
 from flask import Flask, render_template, request, jsonify, send_from_directory, url_for, redirect
 

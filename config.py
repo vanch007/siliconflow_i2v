@@ -3,7 +3,14 @@ Configuration settings for the SiliconFlow I2V application.
 """
 
 # API Configuration
-API_KEY = ""  # 默认为空，从前端获取
+import os
+
+# 从环境变量获取API Key，如果不存在则使用前端传递的值
+# 可以通过以下方式设置 API Key：
+# 1. 在 .env 文件中设置 SILICONFLOW_API_KEY=your_api_key_here
+# 2. 在系统环境变量中设置 SILICONFLOW_API_KEY
+# 3. 在前端界面中输入 API Key
+API_KEY = os.environ.get('SILICONFLOW_API_KEY', "")  # 如果环境变量不存在，则默认为空字符串
 API_BASE_URL = "https://api.siliconflow.cn/v1"
 FREE_API_KEY_URL = "https://cloud.siliconflow.cn/i/TToSB555"
 

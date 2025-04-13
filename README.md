@@ -30,8 +30,25 @@
    pip install -r requirements.txt
    ```
 
-3. 配置您的API密钥：
-   编辑`config.py`文件并添加您的SiliconFlow API密钥。
+3. 配置您的API密钥（选择一种方式）：
+
+   **方式一：使用环境变量（推荐）**
+   - 复制`.env.example`文件并重命名为`.env`
+   - 编辑`.env`文件，添加您的SiliconFlow API密钥：
+
+     ```bash
+     SILICONFLOW_API_KEY=your_api_key_here
+     ```
+
+   - 注意：`.env`文件不会被提交到Git仓库，因此您的API密钥将保持安全
+
+   **方式二：通过Web界面输入**
+   - 启动应用程序后，在Web界面中输入您的API密钥
+   - API密钥将存储在浏览器的localStorage中，不会被提交到服务器
+
+   **方式三：编辑配置文件（不推荐）**
+   - 编辑`config.py`文件并添加您的SiliconFlow API密钥
+   - 注意：这种方式可能会将您的API密钥提交到Git仓库，除非您将`config.py`添加到`.gitignore`文件中
 
 ## 使用方法
 

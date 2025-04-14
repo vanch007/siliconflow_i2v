@@ -20,7 +20,7 @@
 1. 克隆此仓库：
 
    ```bash
-   git clone <仓库URL>
+   git clone https://github.com/vanch007/siliconflow_i2v.git
    cd siliconflow-i2v
    ```
 
